@@ -1,0 +1,37 @@
+{
+  "name": "mini-erp-server",
+  "version": "1.0.0",
+  "description": "Mini ERP — Inventory & Sales Management API (backend)",
+  "license": "MIT",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "seed": "tsx src/seed/seed.ts"
+  },
+  "dependencies": {
+    "bcrypt": "6.0.0",
+    "cookie-parser": "1.4.7",
+    "cors": "2.8.6",
+    "dotenv": "17.4.2",
+    "express": "5.2.1",
+    "mongoose": "9.7.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/bcrypt": "6.0.0",
+    "@types/cookie-parser": "1.4.10",
+    "@types/cors": "2.8.19",
+    "@types/express": "5.0.6",
+    "@types/node": "26.1.0",
+    "eslint": "10.6.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.4",
+    "tsx": "4.23.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.62.1"
+  }
+}
