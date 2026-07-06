@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler } from 'express';
+import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { Error as MongooseError } from 'mongoose';
 import { ZodError } from 'zod';
 import { AppError } from '../utils/AppError';
@@ -41,6 +42,12 @@ export const globalErrorHandler: ErrorRequestHandler = (
     statusCode = 409;
     const key = Object.keys((err as MongoServerError).keyValue ?? {})[0];
     message = `Duplicate value for field: ${key ?? 'unknown'}`;
+  } else if (err instanceof TokenExpiredError) {
+    statusCode = 401;
+    message = 'Token expired';
+  } else if (err instanceof JsonWebTokenError) {
+    statusCode = 401;
+    message = 'Invalid token';
   } else if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;

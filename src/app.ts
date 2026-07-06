@@ -4,6 +4,7 @@ import express from 'express';
 import { config } from './config';
 import { globalErrorHandler } from './middleware/globalErrorHandler';
 import { notFound } from './middleware/notFound';
+import router from './routes';
 import { sendResponse } from './utils/sendResponse';
 
 const app = express();
@@ -32,7 +33,8 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// Feature routers mount above this line in later batches.
+// Feature routers.
+app.use('/api', router);
 
 // 404 then the global error handler — both must stay last, in this order.
 app.use(notFound);

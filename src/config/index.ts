@@ -16,6 +16,10 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   CORS_ORIGIN: z.string().min(1, 'CORS_ORIGIN is required'),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(20).default(12),
+  JWT_ACCESS_SECRET: z.string().min(1, 'JWT_ACCESS_SECRET is required'),
+  JWT_REFRESH_SECRET: z.string().min(1, 'JWT_REFRESH_SECRET is required'),
+  JWT_ACCESS_EXPIRES: z.string().default('15m'),
+  JWT_REFRESH_EXPIRES: z.string().default('7d'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -35,4 +39,8 @@ export const config = Object.freeze({
   databaseUrl: env.DATABASE_URL,
   corsOrigin: env.CORS_ORIGIN,
   bcryptSaltRounds: env.BCRYPT_SALT_ROUNDS,
+  jwtAccessSecret: env.JWT_ACCESS_SECRET,
+  jwtRefreshSecret: env.JWT_REFRESH_SECRET,
+  jwtAccessExpires: env.JWT_ACCESS_EXPIRES,
+  jwtRefreshExpires: env.JWT_REFRESH_EXPIRES,
 });
