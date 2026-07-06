@@ -1,11 +1,16 @@
 import mongoose from 'mongoose';
 import type { PopulateOptions } from 'mongoose';
+import { emitLowStock } from '../../socket';
 import { AppError } from '../../utils/AppError';
 import { QueryBuilder } from '../../utils/QueryBuilder';
 import { Customer } from '../customer/customer.model';
+import type { IProduct } from '../product/product.interface';
 import { Product } from '../product/product.model';
 import type { ISale, ISaleItem } from './sale.interface';
 import { Sale } from './sale.model';
+
+// Products at or below this on-hand quantity trigger a low-stock alert.
+const LOW_STOCK_THRESHOLD = 5;
 
 interface SaleItemInput {
   product: string;
@@ -44,9 +49,13 @@ const create = async (
 
   const session = await mongoose.startSession();
   let created: ISale | null = null;
+  // Post-decrement product docs, held for the after-commit low-stock check.
+  // Reset at the top of the callback so a withTransaction retry starts fresh.
+  let updatedProducts: IProduct[] = [];
   try {
     await session.withTransaction(async () => {
       const computedItems: ISaleItem[] = [];
+      updatedProducts = [];
 
       for (const item of input.items) {
         const product = await Product.findOneAndUpdate(
@@ -72,6 +81,7 @@ const create = async (
           unitPrice,
           lineTotal: unitPrice * item.quantity,
         });
+        updatedProducts.push(product);
       }
 
       const grandTotal = computedItems.reduce(
@@ -103,6 +113,22 @@ const create = async (
   if (!sale) {
     throw new AppError(500, 'Sale not found after creation');
   }
+
+  // After commit only: alert on any product this sale dropped below threshold.
+  // Best-effort — emitLowStock swallows all socket errors, never delaying the
+  // sale. Skipped entirely when nothing crossed the line.
+  const lowStock = updatedProducts
+    .filter((p) => p.stockQuantity < LOW_STOCK_THRESHOLD)
+    .map((p) => ({
+      id: String(p._id),
+      name: p.name,
+      sku: p.sku,
+      stockQuantity: p.stockQuantity,
+    }));
+  if (lowStock.length > 0) {
+    emitLowStock(lowStock, String(sale._id));
+  }
+
   return sale;
 };
 
