@@ -13,12 +13,14 @@
   },
   "dependencies": {
     "bcrypt": "6.0.0",
+    "cloudinary": "2.10.0",
     "cookie-parser": "1.4.7",
     "cors": "2.8.6",
     "dotenv": "17.4.2",
     "express": "5.2.1",
     "jsonwebtoken": "9.0.3",
     "mongoose": "9.7.3",
+    "multer": "2.2.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -28,6 +30,7 @@
     "@types/cors": "2.8.19",
     "@types/express": "5.0.6",
     "@types/jsonwebtoken": "9.0.10",
+    "@types/multer": "2.2.0",
     "@types/node": "26.1.0",
     "eslint": "10.6.0",
     "eslint-config-prettier": "10.1.8",

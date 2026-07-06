@@ -20,6 +20,9 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(1, 'JWT_REFRESH_SECRET is required'),
   JWT_ACCESS_EXPIRES: z.string().default('15m'),
   JWT_REFRESH_EXPIRES: z.string().default('7d'),
+  CLOUDINARY_CLOUD_NAME: z.string().min(1, 'CLOUDINARY_CLOUD_NAME is required'),
+  CLOUDINARY_API_KEY: z.string().min(1, 'CLOUDINARY_API_KEY is required'),
+  CLOUDINARY_API_SECRET: z.string().min(1, 'CLOUDINARY_API_SECRET is required'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -43,4 +46,7 @@ export const config = Object.freeze({
   jwtRefreshSecret: env.JWT_REFRESH_SECRET,
   jwtAccessExpires: env.JWT_ACCESS_EXPIRES,
   jwtRefreshExpires: env.JWT_REFRESH_EXPIRES,
+  cloudinaryCloudName: env.CLOUDINARY_CLOUD_NAME,
+  cloudinaryApiKey: env.CLOUDINARY_API_KEY,
+  cloudinaryApiSecret: env.CLOUDINARY_API_SECRET,
 });

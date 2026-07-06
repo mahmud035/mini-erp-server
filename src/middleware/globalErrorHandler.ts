@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from 'express';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { Error as MongooseError } from 'mongoose';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 import { AppError } from '../utils/AppError';
 import { config } from '../config';
@@ -48,6 +49,9 @@ export const globalErrorHandler: ErrorRequestHandler = (
   } else if (err instanceof JsonWebTokenError) {
     statusCode = 401;
     message = 'Invalid token';
+  } else if (err instanceof MulterError) {
+    statusCode = 400;
+    message = err.message; // e.g. 'File too large', 'Unexpected field'
   } else if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;

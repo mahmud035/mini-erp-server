@@ -1,6 +1,10 @@
+import dns from 'node:dns';
 import app from './app';
 import { config } from './config';
 import { connectDB } from './config/db';
+
+// Resilient DNS on hosts whose IPv6 route to external APIs blackholes (Happy-Eyeballs hang); harmless where IPv6 works.
+dns.setDefaultResultOrder('ipv4first');
 
 /**
  * Process entry point: connect to MongoDB first, then start accepting HTTP
