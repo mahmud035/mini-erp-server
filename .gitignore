@@ -20,4 +20,6 @@ npm-debug.log*
 .vscode/
 *.swp
 
+
 verify-images.sh
+verify-sockets.mjs
