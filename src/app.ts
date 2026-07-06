@@ -9,6 +9,10 @@ import { sendResponse } from './utils/sendResponse';
 
 const app = express();
 
+// Behind Railway's TLS-terminating proxy: trust the first hop so Express sees
+// the real protocol/IP (required for Secure cookies over the proxy).
+app.set('trust proxy', 1);
+
 // Middleware order matters: CORS (with credentials for cookie auth) must run
 // before body/cookie parsing so preflight and origin checks happen first.
 app.use(

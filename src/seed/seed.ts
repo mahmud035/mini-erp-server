@@ -1,9 +1,13 @@
 import type { Types } from 'mongoose';
 import { connectDB, disconnectDB } from '../config/db';
+import { Customer } from '../modules/customer/customer.model';
 import { Permission } from '../modules/permission/permission.model';
+import { Product } from '../modules/product/product.model';
 import { Role } from '../modules/role/role.model';
 import { User } from '../modules/user/user.model';
+import { customerSeeds } from './customers.data';
 import { permissionCatalog } from './permissions.data';
+import { productSeeds } from './products.data';
 import { roleSeeds } from './roles.data';
 import { DEV_PASSWORD, userSeeds } from './users.data';
 
@@ -78,8 +82,38 @@ const seedUsers = async (): Promise<void> => {
 };
 
 /**
- * Idempotent seed entry point: permissions -> roles -> users, then prints the
- * dev credentials. Safe to run repeatedly.
+ * Upserts the demo customers keyed on email. Idempotent: re-running updates the
+ * matched doc in place rather than inserting a duplicate. Additive demo data.
+ */
+const seedCustomers = async (): Promise<void> => {
+  for (const c of customerSeeds) {
+    await Customer.findOneAndUpdate(
+      { email: c.email },
+      { $set: c },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+    );
+  }
+  console.log(`  • customers: ${customerSeeds.length} upserted`);
+};
+
+/**
+ * Upserts the demo products keyed on sku (placeholder images, no Cloudinary).
+ * Idempotent per sku. One product is intentionally low-stock for the dashboard.
+ */
+const seedProducts = async (): Promise<void> => {
+  for (const p of productSeeds) {
+    await Product.findOneAndUpdate(
+      { sku: p.sku },
+      { $set: p },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+    );
+  }
+  console.log(`  • products: ${productSeeds.length} upserted`);
+};
+
+/**
+ * Idempotent seed entry point: permissions -> roles -> users -> demo customers
+ * & products, then prints the dev credentials. Safe to run repeatedly.
  */
 const seed = async (): Promise<void> => {
   try {
@@ -89,6 +123,8 @@ const seed = async (): Promise<void> => {
     const permissionIds = await seedPermissions();
     await seedRoles(permissionIds);
     await seedUsers();
+    await seedCustomers();
+    await seedProducts();
 
     console.log('\n✅ Seed complete. Dev credentials (password for all):');
     console.log(`   password: ${DEV_PASSWORD}`);
