@@ -12,7 +12,9 @@ import { authService } from './auth.service';
 
 /**
  * POST /auth/login — validate credentials, set httpOnly access+refresh cookies,
- * return the single user response shape (no password).
+ * and also return the access token in the body so client JS can authenticate the
+ * socket.io handshake (the httpOnly cookie is unreadable by JS / can't ride a
+ * cross-site WebSocket). REST auth still uses the cookie.
  */
 const login = catchAsync(async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -25,7 +27,7 @@ const login = catchAsync(async (req: Request, res: Response) => {
     statusCode: 200,
     success: true,
     message: 'Logged in successfully',
-    data: user,
+    data: { user, accessToken },
   });
 });
 
@@ -45,7 +47,8 @@ const logout = catchAsync(async (_req: Request, res: Response) => {
 
 /**
  * POST /auth/refresh — mint a new access token from the refresh cookie and set
- * it. A missing cookie is 401; an invalid/expired one maps to 401 centrally.
+ * it, and also return the access token in the body so the client can refresh the
+ * token it uses for the socket handshake. Missing cookie → 401; invalid → 401.
  */
 const refresh = catchAsync(async (req: Request, res: Response) => {
   const token: string | undefined = req.cookies?.[REFRESH_COOKIE];
@@ -58,7 +61,7 @@ const refresh = catchAsync(async (req: Request, res: Response) => {
     statusCode: 200,
     success: true,
     message: 'Token refreshed',
-    data: null,
+    data: { accessToken },
   });
 });
 
