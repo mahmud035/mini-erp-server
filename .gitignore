@@ -19,3 +19,5 @@ npm-debug.log*
 .idea/
 .vscode/
 *.swp
+
+verify-images.sh
