@@ -22,19 +22,20 @@ Every architectural claim below is backed by code in this repo — nothing here 
 
 1. [Live Demo & Credentials](#live-demo--credentials)
 2. [Tech Stack](#tech-stack)
-3. [Engineering Highlights](#engineering-highlights)
-4. [Project Structure](#project-structure)
-5. [Authorization Model](#authorization-model)
-6. [API Reference](#api-reference)
-7. [API Documentation (Postman)](#api-documentation-postman)
-8. [Real-Time Events](#real-time-events-socketio)
-9. [Response Envelope & Error Handling](#response-envelope--error-handling)
-10. [Getting Started](#getting-started)
-11. [Environment Variables](#environment-variables)
-12. [NPM Scripts](#npm-scripts)
-13. [Deployment Notes](#deployment-notes)
-14. [Scope, Trade-offs & Known Issues](#scope-trade-offs--known-issues)
-15. [License](#license)
+3. [Architecture](#architecture)
+4. [Engineering Highlights](#engineering-highlights)
+5. [Project Structure](#project-structure)
+6. [Authorization Model](#authorization-model)
+7. [API Reference](#api-reference)
+8. [API Documentation (Postman)](#api-documentation-postman)
+9. [Real-Time Events](#real-time-events-socketio)
+10. [Response Envelope & Error Handling](#response-envelope--error-handling)
+11. [Getting Started](#getting-started)
+12. [Environment Variables](#environment-variables)
+13. [NPM Scripts](#npm-scripts)
+14. [Deployment Notes](#deployment-notes)
+15. [Scope, Trade-offs & Known Issues](#scope-trade-offs--known-issues)
+16. [Author](#author)
 
 ---
 
@@ -74,6 +75,48 @@ All three roles are seeded on the live database so you can evaluate permission b
 | Real-time  | Socket.io 4, permission-gated rooms                                  |
 | Tooling    | ESLint (flat config) + Prettier, `tsc --noEmit` as a CI gate         |
 | Hosting    | Railway (API), MongoDB Atlas (data), Cloudinary (media)              |
+
+---
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph Client
+        FE["React SPA (Vercel)"]
+    end
+
+    subgraph API["Railway — this repo (Express 5)"]
+        direction TB
+        CORS["CORS + cookie parser<br/>exact-origin allow-list"]
+        Auth["authenticate<br/>JWT cookie/token → req.user"]
+        Perm["requirePermission('resource:action')<br/>the one authorization guard"]
+        Validate["validateRequest<br/>Zod strictObject schemas"]
+        Ctrl["*.controller.ts<br/>thin HTTP layer, never touches the DB"]
+        Svc["*.service.ts<br/>all business logic + DB access"]
+        Err["globalErrorHandler<br/>normalizes every error to one envelope"]
+        Sock["Socket.io server<br/>permission-gated 'inventory' room"]
+    end
+
+    Atlas[("MongoDB Atlas<br/>replica set — sale transactions")]
+    Cloud[("Cloudinary<br/>product images")]
+
+    FE -->|"REST — same-origin proxy, httpOnly cookie"| CORS
+    CORS --> Auth --> Perm --> Validate --> Ctrl --> Svc
+    Svc --> Atlas
+    Svc --> Cloud
+    Svc -.on failure.-> Err
+    Ctrl -.on failure.-> Err
+    FE <-->|"WebSocket — direct, in-memory access-token auth"| Sock
+    Sock --> Auth
+```
+
+Every request — REST or WebSocket — resolves through the same
+`authenticate → requirePermission` pipeline (detailed in Highlights #1 and #5
+below) before it ever reaches a controller. Controllers stay a thin HTTP
+layer; all business logic and DB access lives one hop down in `*.service.ts`
+— so tracing any endpoint's behavior, regardless of module, is always the
+same three-hop path.
 
 ---
 
@@ -520,6 +563,11 @@ someone to discover:
 
 ---
 
-## License
+## Author
 
-MIT © Mahmud — see [`package.json`](package.json).
+**Mahmud** — Full-Stack Developer
+GitHub: [@mahmud035](https://github.com/mahmud035)
+
+Built end-to-end (schema → API → deploy → UI) as a technical assessment.
+
+Licensed under [MIT](./LICENSE).
