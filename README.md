@@ -26,14 +26,15 @@ Every architectural claim below is backed by code in this repo — nothing here 
 4. [Project Structure](#project-structure)
 5. [Authorization Model](#authorization-model)
 6. [API Reference](#api-reference)
-7. [Real-Time Events](#real-time-events-socketio)
-8. [Response Envelope & Error Handling](#response-envelope--error-handling)
-9. [Getting Started](#getting-started)
-10. [Environment Variables](#environment-variables)
-11. [NPM Scripts](#npm-scripts)
-12. [Deployment Notes](#deployment-notes)
-13. [Scope, Trade-offs & Known Issues](#scope-trade-offs--known-issues)
-14. [License](#license)
+7. [API Documentation (Postman)](#api-documentation-postman)
+8. [Real-Time Events](#real-time-events-socketio)
+9. [Response Envelope & Error Handling](#response-envelope--error-handling)
+10. [Getting Started](#getting-started)
+11. [Environment Variables](#environment-variables)
+12. [NPM Scripts](#npm-scripts)
+13. [Deployment Notes](#deployment-notes)
+14. [Scope, Trade-offs & Known Issues](#scope-trade-offs--known-issues)
+15. [License](#license)
 
 ---
 
@@ -331,6 +332,26 @@ All routes are prefixed with `/api`. 🔒 = requires a valid access-token cookie
 | Method | Path      | Auth   | Description                              |
 | ------ | --------- | ------ | ---------------------------------------- |
 | GET    | `/health` | Public | `{ uptime, timestamp }` — liveness probe |
+
+---
+
+## API Documentation (Postman)
+
+A complete, self-running Postman collection lives in [`postman/`](postman/) — 45 requests
+across 11 folders covering every route above, plus a dedicated RBAC negative-test folder
+that actually logs in as each role and asserts the permission boundaries in the table above
+are enforced (not just documented).
+
+| File                                                     | Purpose                                                                 |
+| -------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [`postman/POSTMAN_GUIDE.md`](postman/POSTMAN_GUIDE.md)   | Import steps, recommended run order, permission matrix, troubleshooting |
+| `postman/Mini-ERP-API.postman_collection.json`           | The collection itself                                                   |
+| `postman/Mini-ERP-Live-Railway.postman_environment.json` | Points at the live deployment — import and run, zero local setup        |
+| `postman/Mini-ERP-Local.postman_environment.json`        | Points at `http://localhost:5000/api` for a local checkout              |
+
+Request scripts auto-capture every id needed downstream (roles, permissions, demo
+products/customers/sales) into environment variables, and auth cookies are handled entirely
+by Postman's cookie jar — nothing to copy-paste manually to exercise the whole API end to end.
 
 ---
 

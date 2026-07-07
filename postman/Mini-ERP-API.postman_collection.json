@@ -1,0 +1,2382 @@
+{
+  "info": {
+    "_postman_id": "029c24f1-f69d-4832-a6af-565d3ed4ef41",
+    "name": "Mini ERP \u2014 Inventory & Sales Management API",
+    "description": "Full API test suite for the Mini ERP backend (Inventory & Sales Management System) \u2014 a full-stack developer assessment submission.\n\n**Start here:** import both this collection and one of the two companion Environments (Local or Live), select the Environment in the top-right dropdown, then run `00 - Health` to confirm connectivity, then `01 - Auth > Login as Admin`.\n\n**Everything below that is designed to run top-to-bottom** (use the folder or collection Runner) with zero manual setup: request scripts automatically capture every id you'll need (roles, permissions, demo products/customers/sales) into Environment variables, so later requests just reference `{{productId}}`, `{{customerId}}`, etc. Auth cookies are handled entirely by Postman's built-in cookie jar \u2014 there is nothing to copy into headers manually.\n\nSee the accompanying `POSTMAN_GUIDE.md` for the full walkthrough, the permission matrix, and troubleshooting tips.\n\nFolders are numbered in the order they're meant to run:\n- 00 Health \u2192 01 Auth \u2192 02 Permissions \u2192 03 Roles \u2192 04 Users \u2192 05 Products \u2192 06 Customers \u2192 07 Sales \u2192 08 Dashboard \u2192 09 RBAC Boundary Tests \u2192 10 Cleanup",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Health",
+      "description": "Liveness probe. Public, no authentication required. Good first request to confirm the environment's baseUrl is reachable before running anything else.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Returns server uptime + timestamp. If this fails, check the active Environment's `baseUrl` (Local vs Live)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('Body reports uptime and timestamp', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('uptime');",
+                  "    pm.expect(json.data).to.have.property('timestamp');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 - Auth",
+      "description": "Login sets httpOnly `accessToken` + `refreshToken` cookies via Set-Cookie \u2014 Postman's cookie jar stores and resends them automatically for every subsequent request to the same domain. You never need to manually copy a token into a header. Run 'Login as Admin' first; it establishes the session every folder from 02 onward assumes.",
+      "item": [
+        {
+          "name": "Login as Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates the seeded admin account and establishes the cookie session used by every request in folders 02-08.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('Login response includes user + accessToken', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('user');",
+                  "    pm.expect(json.data).to.have.property('accessToken');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('accessToken', json.data.accessToken);",
+                  "pm.environment.set('currentUserId', json.data.user.id);",
+                  "pm.environment.set('currentRole', json.data.user.role.name);",
+                  "pm.test(\"Logged in role is 'admin'\", function () {",
+                  "    pm.expect(json.data.user.role.name).to.eql('admin');",
+                  "});",
+                  "console.log('Session cookies (accessToken/refreshToken) were set automatically by the Set-Cookie header \u2014 Postman\\'s cookie jar handles them for every request that follows, on this domain, for the rest of the run.');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User (Me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Returns the authenticated principal resolved fresh from the DB (role + permissions populated). Confirms the cookie session is live."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('Includes resolved permissions array', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.permissions).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Access Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Mints a new access token from the refresh cookie (access tokens expire after 15 minutes by default). Call this if you hit an unexpected 401 partway through a long testing session instead of logging in again."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('Returns a fresh accessToken', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('accessToken');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Permissions (Admin)",
+      "description": "Read-only permission catalog. Gated by `role:read`, so only Admin (in this seed set) can view it. Running 'Get Permission Catalog' captures every permission's Mongo _id into environment variables named `permId_<resource>_<action>` (e.g. `permId_product_read`) so the Roles folder below can reference real ids without you looking them up by hand.",
+      "item": [
+        {
+          "name": "Get Permission Catalog",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "permissions"
+              ]
+            },
+            "description": "Requires `role:read`. Returns the full 19-entry permission catalog, sorted by resource then action. Auto-captures every id into `permId_<resource>_<action>` environment variables for reuse below."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Catalog has exactly 19 permissions', function () {",
+                  "    pm.expect(json.data.length).to.eql(19);",
+                  "});",
+                  "json.data.forEach(function (p) {",
+                  "    const key = 'permId_' + p.name.replace(':', '_');",
+                  "    pm.environment.set(key, p._id);",
+                  "});",
+                  "console.log('Captured ' + json.data.length + ' permission ids (permId_<resource>_<action>).');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Roles (Admin)",
+      "description": "Full role CRUD, gated by `role:*`. System roles (admin/manager/employee) can have their permissions edited but cannot be renamed or deleted (try it \u2014 you'll get a 403 with a clear message, not a silent no-op). 'Get All Roles' captures each system role's id into `roleId_admin` / `roleId_manager` / `roleId_employee` for reuse in the Users folder.",
+      "item": [
+        {
+          "name": "Get All Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            },
+            "description": "Requires `role:read`. Captures each role's id into `roleId_<name>` (e.g. `roleId_manager`) for the Users folder."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "json.data.forEach(function (r) {",
+                  "    pm.environment.set('roleId_' + r.name, r._id);",
+                  "});",
+                  "pm.test('Three system roles are present', function () {",
+                  "    const names = json.data.map(function (r) { return r.name; });",
+                  "    pm.expect(names).to.include.members(['admin', 'manager', 'employee']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Role by ID (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{roleId_admin}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{roleId_admin}}"
+              ]
+            },
+            "description": "Requires `role:read`. Fetches the admin role with permissions populated."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('Admin role has all 19 permissions', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.permissions.length).to.eql(19);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Demo Role (Cashier)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            },
+            "description": "Requires `role:create`. Creates a NON-system role with a deliberately narrow permission set \u2014 proves permissions are assigned by real id, not by name string. Captures the new role's id into `demoRoleId`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"cashier\",\n  \"permissions\": [\n    \"{{permId_product_read}}\",\n    \"{{permId_sale_create}}\",\n    \"{{permId_dashboard_read}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('demoRoleId', json.data._id);",
+                  "pm.test('New role is not a system role', function () {",
+                  "    pm.expect(json.data.isSystem).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Demo Role (Add Permission)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{demoRoleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{demoRoleId}}"
+              ]
+            },
+            "description": "Requires `role:update`. Widens the demo role's permission set to also include `customer:read` \u2014 demonstrates that editing a role's permissions takes effect for that role's users on their VERY NEXT request, with no re-login or redeploy needed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": [\n    \"{{permId_product_read}}\",\n    \"{{permId_sale_create}}\",\n    \"{{permId_dashboard_read}}\",\n    \"{{permId_customer_read}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attempt: Rename a System Role (expect 403)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{roleId_employee}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{roleId_employee}}"
+              ]
+            },
+            "description": "Requires `role:update`. Even Admin cannot rename a SYSTEM role (admin/manager/employee) \u2014 only its permission set is editable. Expect 403, not a silent success.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"renamed-employee\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 (system roles cannot be renamed)', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Demo Role",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{demoRoleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{demoRoleId}}"
+              ]
+            },
+            "description": "Requires `role:delete`. Cleans up the demo 'cashier' role created above."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Users (Admin)",
+      "description": "Full user CRUD, gated by `user:*`. 'Get All Users' captures the three seeded users' ids into `userId_admin` / `userId_manager` / `userId_employee` by matching email.",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Requires `user:read`. Captures seeded user ids for reuse."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "json.data.forEach(function (u) {",
+                  "    if (u.email === pm.environment.get('adminEmail')) pm.environment.set('userId_admin', u.id);",
+                  "    if (u.email === pm.environment.get('managerEmail')) pm.environment.set('userId_manager', u.id);",
+                  "    if (u.email === pm.environment.get('employeeEmail')) pm.environment.set('userId_employee', u.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId_employee}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId_employee}}"
+              ]
+            },
+            "description": "Requires `user:read`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Demo User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Requires `user:create`. Creates a new user assigned the employee role (using the `roleId_employee` captured in folder 03). Captures the new user's id into `demoUserId`.\n\nRe-running this twice without deleting first will correctly 409 (duplicate email) \u2014 that's the unique index working, not a bug.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Cashier\",\n  \"email\": \"demo.cashier@erp.test\",\n  \"password\": \"Password123!\",\n  \"role\": \"{{roleId_employee}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('demoUserId', json.data.id);",
+                  "pm.test('Password is never returned', function () {",
+                  "    pm.expect(json.data).to.not.have.property('password');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Demo User (Deactivate)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{demoUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{demoUserId}}"
+              ]
+            },
+            "description": "Requires `user:update`. Flips `isActive` to false \u2014 an inactive user fails login with 401 even given the correct password (see `auth.service.ts`).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('isActive is now false', function () {",
+                  "    pm.expect(pm.response.json().data.isActive).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Demo User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{demoUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{demoUserId}}"
+              ]
+            },
+            "description": "Requires `user:delete`. Cleans up the demo user created above."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 - Products",
+      "description": "Inventory CRUD. Create/Update use `multipart/form-data` \u2014 the `image` field is required on create and optional on update (Postman will prompt you to attach a local file for any `file`-type form field; any small jpg/png works). List supports `searchTerm`, `page`, `limit`, `sort`, `fields` via the shared QueryBuilder.",
+      "item": [
+        {
+          "name": "Get All Products (Search + Pagination)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "searchTerm",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "sort",
+                  "value": "-createdAt",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Requires `product:read`. Try `searchTerm=chair` or `searchTerm=STAND-DESK-03` against the seeded demo products to see the case-insensitive name/sku/category search in action."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('Pagination metadata is present', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('items');",
+                  "    pm.expect(json.data.pagination).to.include.keys('page', 'limit', 'total', 'totalPages');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Demo Product",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ]
+            },
+            "description": "Requires `product:create`. **Attach an image file to the `image` field before sending** \u2014 the API rejects creation with 400 if no image is present. Captures the new product's id into `productId`.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Demo Bluetooth Speaker",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "sku",
+                  "value": "DEMO-SPEAKER-01",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "category",
+                  "value": "Electronics",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "purchasePrice",
+                  "value": "1500",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "sellingPrice",
+                  "value": "2200",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "stockQuantity",
+                  "value": "50",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": [],
+                  "description": "Attach any image file (jpg/png) here before sending."
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('productId', json.data._id);",
+                  "pm.test('Image was uploaded (url + publicId present)', function () {",
+                  "    pm.expect(json.data.image).to.have.property('url');",
+                  "    pm.expect(json.data.image).to.have.property('publicId');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "Requires `product:read`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Demo Product (Price Only)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "Requires `product:update`. Plain JSON body, no image \u2014 proves an image-only-optional update works: existing image is left untouched.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sellingPrice\": 2500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('sellingPrice was updated', function () {",
+                  "    pm.expect(pm.response.json().data.sellingPrice).to.eql(2500);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Demo Product (Replace Image)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "Requires `product:update`. Image-only update (no text fields) \u2014 attach a different file to `image`. The new file overwrites the SAME Cloudinary public_id, so the product's image URL never changes.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": [],
+                  "description": "Attach any image file (jpg/png) here before sending."
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attempt: Duplicate SKU (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ]
+            },
+            "description": "Requires `product:create`. Re-submits the SAME sku used above \u2014 demonstrates the unique index + global error handler mapping E11000 to a clean 409, instead of a raw Mongo error leaking through.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Duplicate SKU Test",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "sku",
+                  "value": "DEMO-SPEAKER-01",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "category",
+                  "value": "Electronics",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "purchasePrice",
+                  "value": "1",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "sellingPrice",
+                  "value": "2",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "stockQuantity",
+                  "value": "1",
+                  "type": "text",
+                  "description": ""
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": [],
+                  "description": "Attach any image file (jpg/png) here before sending."
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 409 Conflict', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test('Message names the duplicate field', function () {",
+                  "    pm.expect(pm.response.json().message.toLowerCase()).to.include('sku');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Demo Product",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "Requires `product:delete`. Deletes the DB record; the Cloudinary asset is destroyed best-effort in the background (never blocks this response)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 - Customers",
+      "description": "Customer CRUD. Note the asymmetric permission model: `customer:read/create/update` are shared by Admin+Manager (and read-only by Employee too, for the sale-creation picker), but `customer:delete` is Admin-only \u2014 tested in folder 09.",
+      "item": [
+        {
+          "name": "Get All Customers (Search + Pagination)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "searchTerm",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Requires `customer:read`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Demo Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            },
+            "description": "Requires `customer:create`. Captures the new customer's id into `customerId`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Customer\",\n  \"phone\": \"01799999999\",\n  \"email\": \"demo.customer@example.com\",\n  \"address\": \"123 Demo Street, Dhaka\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.environment.set('customerId', pm.response.json().data._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Customer by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}"
+              ]
+            },
+            "description": "Requires `customer:read`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Demo Customer",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}"
+              ]
+            },
+            "description": "Requires `customer:update`. Partial update \u2014 only the address changes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"456 Updated Road, Dhaka\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Demo Customer",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}"
+              ]
+            },
+            "description": "Requires `customer:delete` (Admin only). Cleans up the demo customer."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 - Sales",
+      "description": "The differentiator flow: a transactional sale with a guarded atomic stock decrement. This folder first looks up two seeded records so the sale request always has valid, real ids to reference \u2014 no manual lookup needed. Selling 4 units of the seeded 'Standing Desk' (stock 8) drops it to 4, which crosses the low-stock threshold (<5) and would push a `low-stock-alert` over Socket.io in a connected client.",
+      "item": [
+        {
+          "name": "Lookup Seeded Product (Standing Desk)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "searchTerm",
+                  "value": "STAND-DESK-03",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Requires `product:read`. Captures the seeded Standing Desk's id into `productId_standingDesk` for the sale below."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('Seeded Standing Desk was found', function () {",
+                  "    pm.expect(json.data.items.length).to.be.above(0);",
+                  "});",
+                  "if (json.data.items.length > 0) {",
+                  "    pm.environment.set('productId_standingDesk', json.data.items[0]._id);",
+                  "    pm.environment.set('stock_standingDesk_before', json.data.items[0].stockQuantity);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lookup Seeded Customer (Aisha Rahman)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "searchTerm",
+                  "value": "Aisha Rahman",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Requires `customer:read`. Captures the seeded customer's id into `customerId_aisha` for the sale below (and for the RBAC negative tests in folder 09)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('Seeded customer Aisha Rahman was found', function () {",
+                  "    pm.expect(json.data.items.length).to.be.above(0);",
+                  "});",
+                  "if (json.data.items.length > 0) {",
+                  "    pm.environment.set('customerId_aisha', json.data.items[0]._id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Sale (Happy Path)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales"
+              ]
+            },
+            "description": "Requires `sale:create`. Sells 4 units of the Standing Desk to Aisha Rahman. `unitPrice` is snapshotted server-side from the product's current sellingPrice and `grandTotal` is server-computed \u2014 sending either in the body would be rejected (`strictObject`).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer\": \"{{customerId_aisha}}\",\n  \"items\": [\n    {\n      \"product\": \"{{productId_standingDesk}}\",\n      \"quantity\": 4\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('saleId', json.data._id);",
+                  "pm.test('grandTotal equals sum of line totals', function () {",
+                  "    const sum = json.data.items.reduce(function (s, i) { return s + i.lineTotal; }, 0);",
+                  "    pm.expect(json.data.grandTotal).to.eql(sum);",
+                  "});",
+                  "console.log('If a Socket.io client is connected with product:update permission, a low-stock-alert should have just fired for the Standing Desk (see the Testing Guide for how to observe this with the live frontend).');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get All Sales",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales"
+              ]
+            },
+            "description": "Requires `sale:read`. Newest first, populated with customer name and each line's product name/sku."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Sale by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sales/{{saleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "{{saleId}}"
+              ]
+            },
+            "description": "Requires `sale:read`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attempt: Sale with Insufficient Stock (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales"
+              ]
+            },
+            "description": "Requires `sale:create`. Requests an absurd quantity (9999) of the same product \u2014 the guarded decrement fails its `$gte` check, the whole transaction aborts, and NO stock changes / NO sale is written. Confirm this yourself by re-running 'Get Product by ID' on `productId_standingDesk` afterwards \u2014 its stock is unchanged.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer\": \"{{customerId_aisha}}\",\n  \"items\": [\n    {\n      \"product\": \"{{productId_standingDesk}}\",\n      \"quantity\": 9999\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 409 Conflict', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test('Message explains insufficient stock', function () {",
+                  "    pm.expect(pm.response.json().message.toLowerCase()).to.include('stock');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 - Dashboard",
+      "description": "Aggregate stats for a landing/overview screen.",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard"
+              ]
+            },
+            "description": "Requires `dashboard:read`. After the Sales folder above, `lowStockProducts` should include the Standing Desk (now below 5 units)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('Shape includes all four dashboard fields', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.include.keys(",
+                  "        'totalProducts', 'totalCustomers', 'totalSales', 'lowStockProducts');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 - RBAC Boundary Tests (Negative Cases)",
+      "description": "The whole point of the dynamic RBAC model is that it's enforced identically on every route. These requests deliberately attempt actions each role is NOT permitted to do, and assert 403. Every one of these fails at the `requirePermission` guard \u2014 BEFORE multer or Zod even run \u2014 so the request bodies below are intentionally minimal; the permission check happens first regardless of what the body contains. Run this folder top-to-bottom; it logs back in as Admin at the end so your session is left in a known-good state for re-runs.",
+      "item": [
+        {
+          "name": "Login as Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Switches the session to the seeded Employee account.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{employeeEmail}}\",\n  \"password\": \"{{employeePassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('Login response includes user + accessToken', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('user');",
+                  "    pm.expect(json.data).to.have.property('accessToken');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('accessToken', json.data.accessToken);",
+                  "pm.environment.set('currentUserId', json.data.user.id);",
+                  "pm.environment.set('currentRole', json.data.user.role.name);",
+                  "pm.test(\"Logged in role is 'employee'\", function () {",
+                  "    pm.expect(json.data.user.role.name).to.eql('employee');",
+                  "});",
+                  "console.log('Session cookies (accessToken/refreshToken) were set automatically by the Set-Cookie header \u2014 Postman\\'s cookie jar handles them for every request that follows, on this domain, for the rest of the run.');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Employee] Attempt: Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ]
+            },
+            "description": "Employee holds `product:read` only, not `product:create`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden (Employee lacks product:create)', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Envelope reports success:false with a permission message', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message.toLowerCase()).to.include('permission');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Employee] Attempt: List All Sales",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales"
+              ]
+            },
+            "description": "Employee holds `sale:create` but NOT `sale:read` \u2014 they can ring up a sale but cannot browse the sales ledger."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden (Employee lacks sale:read)', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Envelope reports success:false with a permission message', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message.toLowerCase()).to.include('permission');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Employee] Attempt: Delete Customer",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId_aisha}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId_aisha}}"
+              ]
+            },
+            "description": "Employee holds `customer:read` only."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden (Employee lacks customer:delete)', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Envelope reports success:false with a permission message', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message.toLowerCase()).to.include('permission');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Manager",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Switches the session to the seeded Manager account.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{managerEmail}}\",\n  \"password\": \"{{managerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('Login response includes user + accessToken', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('user');",
+                  "    pm.expect(json.data).to.have.property('accessToken');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('accessToken', json.data.accessToken);",
+                  "pm.environment.set('currentUserId', json.data.user.id);",
+                  "pm.environment.set('currentRole', json.data.user.role.name);",
+                  "pm.test(\"Logged in role is 'manager'\", function () {",
+                  "    pm.expect(json.data.user.role.name).to.eql('manager');",
+                  "});",
+                  "console.log('Session cookies (accessToken/refreshToken) were set automatically by the Set-Cookie header \u2014 Postman\\'s cookie jar handles them for every request that follows, on this domain, for the rest of the run.');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Manager] Attempt: Delete Customer",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId_aisha}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId_aisha}}"
+              ]
+            },
+            "description": "Manager holds customer read/create/update \u2014 deliberately NOT delete."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden (Manager lacks customer:delete)', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Envelope reports success:false with a permission message', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message.toLowerCase()).to.include('permission');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Manager] Attempt: Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "user:* is Admin-only.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden (Manager lacks user:create)', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Envelope reports success:false with a permission message', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message.toLowerCase()).to.include('permission');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Manager] Attempt: List Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            },
+            "description": "role:* is Admin-only."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden (Manager lacks role:read)', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Envelope reports success:false with a permission message', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message.toLowerCase()).to.include('permission');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Re-login as Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Restores the Admin session so the environment is left in a known-good state for re-running the whole collection.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "pm.test('Login response includes user + accessToken', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('user');",
+                  "    pm.expect(json.data).to.have.property('accessToken');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('accessToken', json.data.accessToken);",
+                  "pm.environment.set('currentUserId', json.data.user.id);",
+                  "pm.environment.set('currentRole', json.data.user.role.name);",
+                  "pm.test(\"Logged in role is 'admin'\", function () {",
+                  "    pm.expect(json.data.user.role.name).to.eql('admin');",
+                  "});",
+                  "console.log('Session cookies (accessToken/refreshToken) were set automatically by the Set-Cookie header \u2014 Postman\\'s cookie jar handles them for every request that follows, on this domain, for the rest of the run.');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 - Cleanup",
+      "description": "Optional. Run this only when you're completely done testing \u2014 it ends the session.",
+      "item": [
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Clears both auth cookies. After this, any request in folders 01-09 will 401 until you log in again."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response follows the standard envelope', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('statusCode');",
+                  "    pm.expect(json).to.have.property('success');",
+                  "    pm.expect(json).to.have.property('message');",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "",
+      "type": "string",
+      "description": "Overridden per-Environment (Local vs Live) \u2014 do not edit at the collection level."
+    }
+  ]
+}
