@@ -248,7 +248,7 @@ Notable, deliberate calls:
 - **`customer:delete` is admin-only** even though create/update are shared with Manager — deleting
   a customer record has a different risk profile than editing one.
 - **System roles (`admin`/`manager`/`employee`) cannot be deleted** via the API (`isSystem: true`),
-  but their **permission sets can still be edited** — so the RBAC system stays genuinely dynamic
+  but their **permission sets can still be edited** — so the RBAC system stays dynamic
   rather than hardcoding three fixed personas.
 
 ---
